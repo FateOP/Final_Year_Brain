@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { AlertTriangle, Globe, HeartHandshake } from "lucide-react";
 import jsPDF from "jspdf";
+import { useCase } from "../context/caseContext"; 
 
 // Patient-friendly explanatory texts and translations
 const patientExplanations = {
@@ -10,6 +11,18 @@ const patientExplanations = {
     hi: "अच्छी खबर! एआई स्कैन विश्लेषण से मस्तिष्क ट्यूमर का कोई संकेत नहीं मिलता है। हालांकि, लक्षण बने रहने पर हमेशा अपने डॉक्टर से सलाह लें।",
     mr: "आनंदाची बातमी! एआय स्कॅन विश्लेषणात मेंदूतील गाठीचे (ट्यूमर) कोणतेही लक्षण दिसून आले नाही. तरीही लक्षणे कायम असल्यास आपल्या डॉक्टरांचा सल्ला घ्या.",
     es: "¡Buenas noticias! El análisis de la exploración por IA no muestra signos de un tumor cerebral. Sin embargo, consulte siempre a su médico si los síntomas persisten."
+  },
+  gbm: {
+    en: "The AI scan indicates a Glioblastoma (GBM). This requires immediate follow-up with your neurosurgeon to discuss specialized and urgent treatment plans.",
+    hi: "एआई स्कैन ग्लियोब्लास्टोमा (GBM) का संकेत देता है। विशेष उपचार योजनाओं पर चर्चा करने के लिए अपने न्यूरोसर्जन के साथ तत्काल फॉलो-अप की आवश्यकता है।",
+    mr: "एआय स्कॅन ग्लिओब्लास्टोमा (GBM) सुचवतो. यावर उपचारांच्या योजनांवर चर्चा करण्यासाठी आपल्या न्यूरोसर्जनशी त्वरित संपर्क साधणे आवश्यक आहे.",
+    es: "La exploración por IA indica un Glioblastoma (GBM). Esto requiere un seguimiento inmediato con su neurocirujano para discutir planes de tratamiento especializados."
+  },
+  lgg: {
+    en: "The AI scan indicates a Lower-Grade Glioma (LGG). This requires a prompt follow-up with your neurologist or neurosurgeon to monitor and discuss treatment plans.",
+    hi: "एआई स्कैन लोअर-ग्रेड ग्लियोमा (LGG) का संकेत देता है। निगरानी और उपचार पर चर्चा के लिए अपने न्यूरोसर्जन के साथ त्वरित फॉलो-अप की आवश्यकता है।",
+    mr: "एआय स्कॅन लोअर-ग्रेड ग्लायोमा (LGG) सुचवतो. पुढील उपचार आणि निरीक्षणासाठी आपल्या न्यूरोलॉजिस्टशी त्वरित संपर्क साधणे आवश्यक आहे.",
+    es: "La exploración por IA indica un glioma de bajo grado (LGG). Esto requiere una consulta con su neurólogo para discutir planes de tratamiento."
   },
   glioma: {
     en: "The AI scan indicates a potential glioma (brain tissue growth). This requires a prompt follow-up with your neurologist or neurosurgeon to discuss specialized treatment plans.",
@@ -31,19 +44,53 @@ const patientExplanations = {
   }
 };
 
+// Helper function to safely prefix raw base64 images from the backend
+const getFormattedImage = (imgSource) => {
+  if (!imgSource) return null;
+  if (imgSource.startsWith("data:") || imgSource.startsWith("blob:") || imgSource.startsWith("http")) {
+    return imgSource;
+  }
+  return `data:image/jpeg;base64,${imgSource}`;
+};
+
 export default function Result() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { addCase } = useCase();
+  
   const { result, preview } = location.state || {};
   
-  const patient = JSON.parse(
-    localStorage.getItem("patient")
-  ) || {};
+  const patient = JSON.parse(localStorage.getItem("patient")) || {};
 
   const [remarks, setRemarks] = useState("");
   const [language, setLanguage] = useState("en");
 
   const predictedKey = result?.predicted_class?.toLowerCase() || "notumor";
+  
+  // Safely fallback to "notumor" only if the key genuinely doesn't exist in our expanded list
   const currentExplanation = patientExplanations[predictedKey]?.[language] || patientExplanations["notumor"][language];
+
+  // Apply the formatting fix to the Grad-CAM image
+  const displayGradCam = getFormattedImage(result?.gradcam_image);
+  const displayPreview = getFormattedImage(preview);
+
+  const handleSaveReport = () => {
+    const newCase = {
+      patient,
+      diagnosis: result?.predicted_class,
+      confidence: result?.confidence,
+      remarks,
+      date: new Date().toISOString(),
+      image: result?.gradcam_image || preview
+    };
+    
+    if (addCase) {
+        addCase(newCase);
+    }
+    
+    alert("Report saved successfully!");
+    navigate("/reports");
+  };
 
   const handleDownloadPDF = () => {
     const doc = new jsPDF("p", "mm", "a4");
@@ -76,9 +123,12 @@ export default function Result() {
     doc.text("AI Prediction Findings", 20, 75);
     
     doc.setFont("helvetica", "normal");
-    const diagnosisText = result?.predicted_class === "notumor" ? "No Tumor Detected" : (result?.predicted_class?.toUpperCase() || "Unknown");
+    const diagnosisText = predictedKey === "notumor" ? "No Tumor Detected" : (result?.predicted_class?.toUpperCase() || "Unknown");
     doc.text(`Diagnosis: ${diagnosisText}`, 20, 83);
-    doc.text(`Confidence: ${result ? (result.confidence * 100).toFixed(1) : "0"}%`, 20, 89);
+    
+    // Safety check for confidence format
+    const confidenceValue = result?.confidence ? (Number(result.confidence) * 100).toFixed(1) : "0";
+    doc.text(`Confidence: ${confidenceValue}%`, 20, 89);
     
     // Remarks
     if (remarks) {
@@ -91,10 +141,14 @@ export default function Result() {
     }
 
     // Attach Image / Heatmap
-    const imageToPrint = result?.gradcam_image || preview;
+    const imageToPrint = displayGradCam || displayPreview;
+    
     if (imageToPrint) {
       const img = new Image();
+      // Ensure crossOrigin is set in case of external URLs to avoid canvas poisoning
+      img.crossOrigin = "Anonymous";
       img.src = imageToPrint;
+      
       img.onload = () => {
         const canvas = document.createElement("canvas");
         canvas.width = img.width;
@@ -107,6 +161,11 @@ export default function Result() {
         
         doc.save(`MRI_Report_${patient.patientName || "Scan"}.pdf`);
       };
+      
+      // Fallback if image fails to load
+      img.onerror = () => {
+         doc.save(`MRI_Report_${patient.patientName || "Scan"}.pdf`);
+      };
     } else {
       doc.save(`MRI_Report_${patient.patientName || "Scan"}.pdf`);
     }
@@ -116,14 +175,9 @@ export default function Result() {
 
   return (
     <div className="min-h-screen bg-slate-100 p-8">
-
       <div className="max-w-7xl mx-auto">
+        <h1 className="text-4xl font-bold mb-8">MRI Analysis Report</h1>
 
-        <h1 className="text-4xl font-bold mb-8">
-          MRI Analysis Report
-        </h1>
-
-        {/* CRITICAL TRIAGE ALERT */}
         {isCritical && (
           <div className="bg-red-100 border-l-4 border-red-600 text-red-800 p-4 mb-8 rounded-2xl shadow flex items-start gap-3">
             <AlertTriangle className="text-red-600 w-6 h-6 flex-shrink-0 mt-0.5" />
@@ -135,34 +189,25 @@ export default function Result() {
         )}
 
         <div className="grid md:grid-cols-2 gap-8">
-
-          {/* Patient Info */}
           <div className="bg-white rounded-3xl shadow p-8">
-            <h2 className="text-2xl font-semibold mb-5">
-              Patient Information
-            </h2>
+            <h2 className="text-2xl font-semibold mb-5">Patient Information</h2>
             <p><strong>Name:</strong> {patient.patientName || "N/A"}</p>
             <p><strong>Age:</strong> {patient.age || "N/A"}</p>
             <p><strong>Gender:</strong> {patient.gender || "N/A"}</p>
             <p><strong>Doctor:</strong> {patient.doctorName || "N/A"}</p>
           </div>
 
-          {/* Prediction */}
           <div className="bg-white rounded-3xl shadow p-8">
-            <h2 className="text-2xl font-semibold mb-5">
-              AI Prediction
-            </h2>
+            <h2 className="text-2xl font-semibold mb-5">AI Prediction</h2>
             <h1 className={`text-6xl font-bold ${predictedKey === 'notumor' ? 'text-green-600' : 'text-red-600'} uppercase`}>
               {predictedKey === 'notumor' ? 'No Tumor' : result?.predicted_class || "N/A"}
             </h1>
             <p className="mt-4 text-xl">
-              Confidence: {result ? (result.confidence * 100).toFixed(1) : "0"}%
+              Confidence: {result?.confidence ? (Number(result.confidence) * 100).toFixed(1) : "0"}%
             </p>
           </div>
-
         </div>
 
-        {/* PATIENT-FRIENDLY TRANSLATED SUMMARY */}
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-3xl shadow p-8 mt-8">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
             <div className="flex items-center gap-3">
@@ -175,7 +220,6 @@ export default function Result() {
               </div>
             </div>
 
-            {/* Language Selector */}
             <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl shadow-sm border border-blue-100">
               <Globe size={18} className="text-blue-600" />
               <select 
@@ -198,38 +242,28 @@ export default function Result() {
           </div>
         </div>
 
-        {/* Images */}
         <div className="grid md:grid-cols-2 gap-8 mt-8">
-
           <div className="bg-white rounded-3xl shadow p-6">
-            <h2 className="text-xl font-semibold mb-4">
-              Original MRI
-            </h2>
+            <h2 className="text-xl font-semibold mb-4">Original MRI</h2>
             <img
-              src={preview || "https://via.placeholder.com/500x350"}
+              src={displayPreview || "https://via.placeholder.com/500x350"}
               alt="MRI"
               className="rounded-xl w-full object-contain h-80 bg-black"
             />
           </div>
 
           <div className="bg-white rounded-3xl shadow p-6">
-            <h2 className="text-xl font-semibold mb-4">
-              Grad-CAM Heatmap
-            </h2>
+            <h2 className="text-xl font-semibold mb-4">Grad-CAM Heatmap</h2>
             <img
-              src={result?.gradcam_image || preview || "https://via.placeholder.com/500x350"}
+              src={displayGradCam || displayPreview || "https://via.placeholder.com/500x350"}
               alt="Grad-CAM Heatmap"
               className="rounded-xl w-full object-contain h-80 bg-black"
             />
           </div>
-
         </div>
 
-        {/* Doctor Remarks */}
         <div className="bg-white rounded-3xl shadow p-8 mt-8">
-          <h2 className="text-2xl font-semibold mb-4">
-            Doctor Remarks
-          </h2>
+          <h2 className="text-2xl font-semibold mb-4">Doctor Remarks</h2>
           <textarea
             rows="5"
             value={remarks}
@@ -239,9 +273,11 @@ export default function Result() {
           />
         </div>
 
-        {/* Buttons */}
         <div className="flex gap-4 mt-8">
-          <button className="bg-blue-600 hover:bg-blue-700 transition-colors text-white px-8 py-4 rounded-xl font-semibold shadow">
+          <button 
+            onClick={handleSaveReport} 
+            className="bg-blue-600 hover:bg-blue-700 transition-colors text-white px-8 py-4 rounded-xl font-semibold shadow"
+          >
             Save Report
           </button>
 
@@ -252,9 +288,7 @@ export default function Result() {
             Download PDF
           </button>
         </div>
-
       </div>
-
     </div>
   );
 }

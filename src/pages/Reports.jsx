@@ -1,109 +1,59 @@
+import { useCase } from "../context/caseContext";
+
 export default function Reports() {
-  const reports = [
-    {
-      patient: "John Doe",
-      date: "04-Jun-2026",
-      prediction: "GBM",
-      confidence: "96.4%",
-    },
-    {
-      patient: "Emily Johnson",
-      date: "21-May-2026",
-      prediction: "LGG",
-      confidence: "92.3%",
-    },
-    {
-      patient: "Rahul Sharma",
-      date: "14-Apr-2026",
-      prediction: "LGG",
-      confidence: "90.7%",
-    },
-  ];
+  const { cases } = useCase(); // Fetch dynamic cases
 
   return (
-    <div className="min-h-screen bg-slate-100 p-8">
+    <div className="w-full">
+      <h1 className="text-4xl font-bold mb-8 text-gray-800">Patient Reports</h1>
 
-      <div className="max-w-7xl mx-auto">
-
-        <h1 className="text-4xl font-bold mb-8">
-          Patient Reports
-        </h1>
-
-        <div className="bg-white rounded-3xl shadow p-8">
-
-          <table className="w-full">
-
+      <div className="bg-white rounded-3xl shadow-lg p-8 border border-gray-100">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
             <thead>
-
-              <tr className="border-b">
-
-                <th className="text-left py-4">
-                  Patient
-                </th>
-
-                <th className="text-left py-4">
-                  Date
-                </th>
-
-                <th className="text-left py-4">
-                  Prediction
-                </th>
-
-                <th className="text-left py-4">
-                  Confidence
-                </th>
-
-                <th className="text-left py-4">
-                  Action
-                </th>
-
+              <tr className="border-b border-gray-200">
+                <th className="py-4 text-gray-600 font-semibold">Patient</th>
+                <th className="py-4 text-gray-600 font-semibold">Date</th>
+                <th className="py-4 text-gray-600 font-semibold">Prediction</th>
+                <th className="py-4 text-gray-600 font-semibold">Confidence</th>
+                <th className="py-4 text-gray-600 font-semibold">Action</th>
               </tr>
-
             </thead>
-
             <tbody>
-
-              {reports.map((report, index) => (
-
-                <tr
-                  key={index}
-                  className="border-b"
-                >
-
-                  <td className="py-4">
-                    {report.patient}
+              {cases && cases.length > 0 ? (
+                cases.slice().reverse().map((report, index) => (
+                  <tr key={index} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition">
+                    <td className="py-4 font-medium text-gray-800">
+                      {report.patient?.patientName || "Unknown"}
+                    </td>
+                    <td className="text-gray-600">
+                      {new Date(report.date).toLocaleDateString()}
+                    </td>
+                    <td className={`font-semibold ${report.diagnosis?.toLowerCase() === 'notumor' ? 'text-green-600' : 'text-red-600'}`}>
+                      {report.diagnosis?.toUpperCase() || "N/A"}
+                    </td>
+                    <td className="text-gray-600">
+                      {report.confidence ? (Number(report.confidence) * 100).toFixed(1) + "%" : "N/A"}
+                    </td>
+                    <td>
+                      <button className="bg-blue-600 text-white px-5 py-2 rounded-xl font-medium hover:bg-blue-700 transition shadow-sm">
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="5" className="py-12 text-center text-gray-500">
+                    <p className="text-lg mb-2">No reports available.</p>
+                    <p className="text-sm">Processed MRI scans will appear here.</p>
                   </td>
-
-                  <td>
-                    {report.date}
-                  </td>
-
-                  <td>
-                    {report.prediction}
-                  </td>
-
-                  <td>
-                    {report.confidence}
-                  </td>
-
-                  <td>
-                    <button className="bg-blue-600 text-white px-4 py-2 rounded-lg">
-                      View
-                    </button>
-                  </td>
-
                 </tr>
-
-              ))}
-
+              )}
             </tbody>
-
           </table>
-
         </div>
-
       </div>
-
     </div>
   );
 }

@@ -1,8 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 export default function PatientForm() {
   const navigate = useNavigate();
+
+  // Clear previous patient data when the form mounts to prevent data bleed to new scans
+  useEffect(() => {
+    localStorage.removeItem("patient");
+  }, []);
 
   const [patient, setPatient] = useState({
     patientName: "",
