@@ -1,0 +1,14 @@
+﻿backend/venv/
+venv/
+**/venv/
+.env
+env/
+__pycache__/
+*.pyc
+node_modules/
+dist/
+build/
+*.h5
+*.keras
+*.pt
+*.pth
