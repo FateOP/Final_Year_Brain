@@ -1,43 +1,97 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useCase } from "../context/caseContext"; // Import your context
+import { useCase } from "../context/caseContext";
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login } = useCase(); // Extract the login function
+  const { login } = useCase();
+  
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState("admin"); // 'admin' or 'patient'
 
   const handleLogin = () => {
-    if (!email) return alert("Please enter an email");
-    login(email); // Update the global state
-    navigate("/dashboard");
+    if (!email || !password) {
+      alert("Please enter both email and password.");
+      return;
+    }
+
+    // Save the user's role so the Layout knows what sidebar links to show
+    localStorage.setItem("userRole", role);
+    login(email); 
+
+    // Route based on role
+    if (role === "admin") {
+      navigate("/dashboard");
+    } else {
+      navigate("/reports");
+    }
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center">
-      <div className="bg-white p-10 rounded-3xl shadow-xl w-[450px]">
+    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+      <div className="bg-white p-10 rounded-3xl shadow-xl w-full max-w-md">
+        
         <h1 className="text-4xl font-bold text-center mb-2">Welcome Back</h1>
         <p className="text-center text-gray-500 mb-8">Login to your account</p>
-        
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full border p-4 rounded-xl mb-4"
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          className="w-full border p-4 rounded-xl mb-6"
-        />
-        
+
+        {/* Role Selection Toggle */}
+        <div className="flex bg-slate-100 p-1 rounded-xl mb-8">
+          <button
+            onClick={() => setRole("admin")}
+            className={`flex-1 py-3 rounded-lg font-semibold transition-all duration-200 ${
+              role === "admin" 
+                ? "bg-white text-blue-600 shadow-sm" 
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Doctor / Admin
+          </button>
+          <button
+            onClick={() => setRole("patient")}
+            className={`flex-1 py-3 rounded-lg font-semibold transition-all duration-200 ${
+              role === "patient" 
+                ? "bg-white text-blue-600 shadow-sm" 
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            Patient
+          </button>
+        </div>
+
+        {/* Inputs */}
+        <div className="space-y-4 mb-6">
+          <input
+            type="email"
+            placeholder={role === "admin" ? "Doctor Email" : "Patient Email or ID"}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full border border-gray-200 p-4 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full border border-gray-200 p-4 rounded-xl outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        {/* Submit */}
         <button
           onClick={handleLogin}
-          className="w-full bg-blue-600 text-white py-4 rounded-xl"
+          className="w-full bg-blue-600 hover:bg-blue-700 transition-colors text-white py-4 rounded-xl font-bold text-lg shadow-md"
         >
-          Login
+          Login as {role === "admin" ? "Admin" : "Patient"}
         </button>
+
+        <p className="text-center mt-6 text-gray-600">
+          Don't have an account?
+          <Link to="/signup" className="text-blue-600 font-semibold ml-2 hover:underline">
+            Sign Up
+          </Link>
+        </p>
+
       </div>
     </div>
   );

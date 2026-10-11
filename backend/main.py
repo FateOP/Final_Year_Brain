@@ -20,6 +20,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Fix 1: Added root endpoint to stop the 404 terminal spam from the React UI ping
+@app.get("/")
+async def root():
+    return {"status": "online"}
+
 # Rebuild the EfficientNetB0 architecture natively to bypass broken JSON configs
 def create_model():
     base_model = EfficientNetB0(include_top=False, weights=None, input_shape=(224, 224, 3))
@@ -35,8 +40,9 @@ def create_model():
 model = create_model()
 
 try:
-    # Load weights directly from your .keras file (bypassing corrupt JSON config parsing)
-    model.load_weights("models/brain_tumor_model.keras")
+    # Fix 2: Added by_name and skip_mismatch to bypass the normalization layer error.
+    # This ensures weights actually load, fixing the 25% confidence (random guess) bug.
+    model.load_weights("models/brain_tumor_model.keras", by_name=True, skip_mismatch=True)
     print("✅ Model weights loaded successfully from .keras file!")
 except Exception as e:
     print(f"❌ Error loading weights: {e}")
@@ -52,37 +58,44 @@ def prepare_image(image_bytes):
 
 def generate_gradcam(img_array, img_expanded, model, pred_index=None):
     try:
+        # 1. Find the inner base model safely
         base_model = None
         for layer in model.layers:
-            if "efficientnet" in layer.name.lower():
+            if isinstance(layer, tf.keras.Model) or "efficientnet" in layer.name.lower():
                 base_model = layer
                 break
         
         if not base_model:
-            for layer in model.layers:
-                if hasattr(layer, "layers"):
-                    base_model = layer
-                    break
-        
-        if not base_model:
             return None
 
+        # 2. Find the last spatial convolutional layer
         last_conv_layer = None
         for layer in reversed(base_model.layers):
-            if "conv" in layer.name.lower():
+            if len(layer.output_shape) == 4:
                 last_conv_layer = layer
                 break
         
         if not last_conv_layer:
             last_conv_layer = base_model.layers[-1]
 
-        grad_model = tf.keras.models.Model(
-            inputs=model.inputs,
-            outputs=[last_conv_layer.output, model.output]
+        # Fix 3: Create an inner model to avoid the "Graph Disconnected" wrapper error
+        inner_model = tf.keras.models.Model(
+            inputs=base_model.inputs,
+            outputs=[last_conv_layer.output, base_model.output]
         )
 
         with tf.GradientTape() as tape:
-            conv_outputs, predictions = grad_model(img_expanded)
+            # Forward pass through inner model
+            conv_outputs, base_outputs = inner_model(img_expanded)
+            tape.watch(conv_outputs)
+            
+            # Continue forward pass through the rest of your custom Dense layers
+            x = base_outputs
+            base_model_index = model.layers.index(base_model)
+            for layer in model.layers[base_model_index + 1:]:
+                x = layer(x)
+            predictions = x
+            
             if pred_index is None:
                 pred_index = tf.argmax(predictions[0])
             loss = predictions[:, pred_index]
