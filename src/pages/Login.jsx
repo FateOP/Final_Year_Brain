@@ -10,21 +10,42 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("admin"); // 'admin' or 'patient'
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!email || !password) {
       alert("Please enter both email and password.");
       return;
     }
 
-    // Save the user's role so the Layout knows what sidebar links to show
-    localStorage.setItem("userRole", role);
-    login(email); 
-
-    // Route based on role
-    if (role === "admin") {
-      navigate("/dashboard");
-    } else {
-      navigate("/reports");
+    try {
+      // Send login credentials to the FastAPI + MongoDB backend
+      const response = await fetch("http://127.0.0.1:8000/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, role })
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        // Save the secure JWT token and role to localStorage
+        localStorage.setItem("userRole", data.role);
+        localStorage.setItem("authToken", data.token); 
+        
+        // Update the global React context state
+        login(data.email); 
+        
+        // Route the user based on their authenticated role
+        if (data.role === "admin") {
+          navigate("/dashboard");
+        } else {
+          navigate("/reports");
+        }
+      } else {
+        alert(data.error || "Login failed. Please check your credentials.");
+      }
+    } catch (error) {
+      console.error("Login Error:", error);
+      alert("Login failed. Please check if the AI backend server is running.");
     }
   };
 

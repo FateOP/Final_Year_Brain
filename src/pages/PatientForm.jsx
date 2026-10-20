@@ -28,7 +28,7 @@ export default function PatientForm() {
     });
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (
       !patient.patientName ||
       !patient.age ||
@@ -39,12 +39,35 @@ export default function PatientForm() {
       return;
     }
 
-    localStorage.setItem(
-      "patient",
-      JSON.stringify(patient)
-    );
+    try {
+      // Send patient data to MongoDB via FastAPI backend
+      const response = await fetch("http://127.0.0.1:8000/register-patient", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: patient.patientName,
+          age: parseInt(patient.age),
+          gender: patient.gender,
+          contact: patient.phone,
+          medical_history: `Symptoms: ${patient.symptoms} | History: ${patient.medicalHistory} | Address: ${patient.address} | Emergency: ${patient.emergencyContact} | Doctor: ${patient.doctorName}`
+        })
+      });
 
-    navigate("/upload");
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        localStorage.setItem(
+          "patient",
+          JSON.stringify(patient)
+        );
+        navigate("/upload");
+      } else {
+        alert(data.error || "Failed to save patient to database.");
+      }
+    } catch (error) {
+      console.error("Patient Registration Error:", error);
+      alert("Connection error. Ensure your FastAPI backend server is running.");
+    }
   };
 
   return (
